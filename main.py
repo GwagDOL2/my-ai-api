@@ -1,3 +1,8 @@
+# 📋 main.py · 과제 — 나만의 AI API
+# ============================================================
+# 13주차 오늘의 과제 · 나만의 AI API (main.py)
+# ------------------------------------------------------------
+# · ★ (직접 작성) 표시가 붙은 곳만 내 주제로 바꾸면 됨
 # · 키는 서버 환경 변수 GEMINI_API_KEY 로만 읽음 (Vercel → Settings → Environment Variables)
 # · 접근 코드는 환경 변수 APP_ACCESS_CODE — 부르는 쪽은 헤더 X-Access-Code 에 같은 값을 넣음
 #   ★ 이 파일 · GitHub 저장소에 키와 접근 코드를 절대 적지 않음
@@ -84,3 +89,33 @@ def ask(request: AskRequest, x_access_code: str | None = Header(default=None)):
             raise HTTPException(status_code=429, detail="Gemini 무료 한도를 넘었습니다 — 1분 뒤 다시 요청하세요")
         raise HTTPException(status_code=502, detail=f"Gemini 요청 실패 (상태 번호 {code})")
     return AskReply(question=request.question, answer=reply.output_text, tokens=reply.usage.total_tokens)
+
+
+# ---- 수업 실습 7-1 화면(AI 용어 설명기)이 부르는 주소 ----
+class Question(BaseModel):
+    word: str = Field(min_length=1, max_length=30, description="궁금한 용어")
+    style: str = Field(default="초등학생도 알아듣게 쉽게", description="설명 말투")
+
+
+class Answer(BaseModel):
+    word: str
+    answer: str
+    tokens: int | None = None
+
+
+@app.post("/explain", response_model=Answer)
+def explain(question: Question, x_access_code: str | None = Header(default=None)):
+    check_access(x_access_code)
+    client = get_client()
+    try:
+        reply = client.interactions.create(
+            model=MODEL_NAME, store=False,
+            system_instruction=f"너는 AI 용어 설명 도우미야. {question.style} 3문장 이내로 설명한다.",
+            input=question.word,
+        )
+    except Exception as error:
+        code = getattr(error, "status_code", None)
+        if code == 429:
+            raise HTTPException(status_code=429, detail="Gemini 무료 한도를 넘었습니다 — 1분 뒤 다시 요청하세요")
+        raise HTTPException(status_code=502, detail=f"Gemini 요청 실패 (상태 번호 {code})")
+    return Answer(word=question.word, answer=reply.output_text, tokens=reply.usage.total_tokens)
